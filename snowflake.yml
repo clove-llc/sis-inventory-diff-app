@@ -1,0 +1,10 @@
+definition_version: 2
+entities:
+  inventory_diff_app:
+    type: streamlit
+    identifier: INVENTORY_DIFF_APP
+    query_warehouse: YOUR_WAREHOUSE
+    main_file: app/streamlit_app.py
+    artifacts:
+      - app/streamlit_app.py
+      - environment.yml

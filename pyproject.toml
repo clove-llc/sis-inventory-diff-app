@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "sis-inventory-diff-app"
+version = "0.1.0"
+description = "Streamlit in Snowflake app for uploading physical inventory Excel files and checking inventory differences."
+authors = []
+readme = ""
+packages = []
+package-mode = false
+
+# アプリ実行に必要なライブラリ
+[tool.poetry.dependencies]
+python = ">=3.11,<3.12" # 今回はウェアハウスランタイムで動作予定のため、使用可能バージョンの最新版である3.11系を指定する。
+streamlit = "1.52.2" # ウェアハウスランタイムでサポートされているStreamlitライブラリのバージョンである1.52.2を指定する。
+pandas = "2.*"
+openpyxl = "*"
+xlsxwriter = "*"
+snowflake-snowpark-python = "*"
+snowflake-connector-python = { extras = ["pandas"], version = "*" }
+
+# 開発・デプロイ・コード整形などに使うライブラリ
+[tool.poetry.group.dev.dependencies]
+snowflake-cli = "*"
+ruff = "*"
+
+# Poetryでこのプロジェクトを扱うためのビルド設定
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+

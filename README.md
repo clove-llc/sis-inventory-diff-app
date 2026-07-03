@@ -10,7 +10,7 @@ sis-inventory-diff-app/
 │   └── secrets.toml
 ├── data/
 │   ├── inventory_snapshot_seed.csv
-│   └── physical_inventory_counts_upload.csv
+│   └── physical_inventory_counts_upload.xlsx
 ├── sql/
 │   └── init.sql
 ├── .gitignore

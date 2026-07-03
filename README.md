@@ -143,7 +143,7 @@ poetry run streamlit run app.py
 `snowflake.yml` の `query_warehouse` を自分のWarehouse名に変更してから実行します。
 
 ```bash
-poetry run snow streamlit deploy --replace --prune --open -c clove_snowflake_dev --database DEV_DATABASE --schema INVENTORY_DIFF_APP
+poetry run snow streamlit deploy --replace --prune --open -c your_connection_name --database YOUR_DATABASE --schema INVENTORY_DIFF_APP
 ```
 
 - `--replace`：Streamlitアプリが既に存在する場合は、それを置き換える。

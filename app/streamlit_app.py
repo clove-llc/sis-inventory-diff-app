@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from typing import Iterable
+from typing import Any, Iterable
 
 import pandas as pd
 import streamlit as st
@@ -9,7 +9,14 @@ import streamlit as st
 APP_TITLE = "棚卸し差異確認アプリ"
 INVENTORY_TABLE = "INVENTORY_SNAPSHOT"
 COUNTS_TABLE = "PHYSICAL_INVENTORY_COUNTS"
-REQUIRED_COLUMNS = ["COUNT_DATE", "STORE_ID", "PRODUCT_ID", "ACTUAL_STOCK_QTY"]
+REQUIRED_COLUMNS = [
+    "COUNT_DATE",
+    "STORE_ID",
+    "STORE_NAME",
+    "PRODUCT_ID",
+    "PRODUCT_NAME",
+    "ACTUAL_STOCK_QTY",
+]
 
 
 st.set_page_config(page_title=APP_TITLE, layout="wide")
@@ -61,21 +68,29 @@ def validate_upload_df(df: pd.DataFrame) -> tuple[pd.DataFrame | None, list[str]
 
     df["COUNT_DATE"] = pd.to_datetime(df["COUNT_DATE"], errors="coerce").dt.date
     df["STORE_ID"] = df["STORE_ID"].astype(str).str.strip()
+    df["STORE_NAME"] = df["STORE_NAME"].astype(str).str.strip()
     df["PRODUCT_ID"] = df["PRODUCT_ID"].astype(str).str.strip()
+    df["PRODUCT_NAME"] = df["PRODUCT_NAME"].astype(str).str.strip()
     df["ACTUAL_STOCK_QTY"] = pd.to_numeric(df["ACTUAL_STOCK_QTY"], errors="coerce")
 
     if df["COUNT_DATE"].isna().any():
         errors.append("COUNT_DATEに日付として解釈できない値があります。")
     if (df["STORE_ID"] == "").any():
         errors.append("STORE_IDが空の行があります。")
+    if (df["STORE_NAME"] == "").any():
+        errors.append("STORE_NAMEが空の行があります。")
     if (df["PRODUCT_ID"] == "").any():
         errors.append("PRODUCT_IDが空の行があります。")
+    if (df["PRODUCT_NAME"] == "").any():
+        errors.append("PRODUCT_NAMEが空の行があります。")
     if df["ACTUAL_STOCK_QTY"].isna().any():
         errors.append("ACTUAL_STOCK_QTYに数値として解釈できない値があります。")
     if (df["ACTUAL_STOCK_QTY"] < 0).any():
         errors.append("ACTUAL_STOCK_QTYに負の値があります。")
 
-    duplicated = df.duplicated(subset=["COUNT_DATE", "STORE_ID", "PRODUCT_ID"], keep=False)
+    duplicated = df.duplicated(
+        subset=["COUNT_DATE", "STORE_ID", "PRODUCT_ID"], keep=False
+    )
     if duplicated.any():
         errors.append("COUNT_DATE、STORE_ID、PRODUCT_IDの組み合わせが重複しています。")
 
@@ -89,7 +104,7 @@ def validate_upload_df(df: pd.DataFrame) -> tuple[pd.DataFrame | None, list[str]
     return df, []
 
 
-def sql_literal(value: object) -> str:
+def sql_literal(value: Any) -> str:
     """簡易的なSQLリテラル化。この記事用の少量データを前提にする。"""
     if pd.isna(value):
         return "NULL"
@@ -105,13 +120,11 @@ def replace_physical_counts(df: pd.DataFrame) -> int:
     for _, row in keys.iterrows():
         count_date = sql_literal(row["COUNT_DATE"])
         store_id = sql_literal(row["STORE_ID"])
-        execute(
-            f"""
+        execute(f"""
             DELETE FROM {COUNTS_TABLE}
             WHERE COUNT_DATE = TO_DATE({count_date})
               AND STORE_ID = {store_id}
-            """
-        )
+            """)
 
     session.write_pandas(
         df,
@@ -123,30 +136,28 @@ def replace_physical_counts(df: pd.DataFrame) -> int:
 
 
 def get_count_dates() -> list[str]:
-    df = fetch_pandas(
-        f"""
+    df = fetch_pandas(f"""
         SELECT DISTINCT COUNT_DATE
         FROM {COUNTS_TABLE}
         ORDER BY COUNT_DATE DESC
-        """
-    )
+        """)
     return [str(v) for v in df["COUNT_DATE"].tolist()]
 
 
 def get_stores(count_date: str) -> list[str]:
     count_date_lit = sql_literal(count_date)
-    df = fetch_pandas(
-        f"""
+    df = fetch_pandas(f"""
         SELECT DISTINCT STORE_ID
         FROM {COUNTS_TABLE}
         WHERE COUNT_DATE = TO_DATE({count_date_lit})
         ORDER BY STORE_ID
-        """
-    )
+        """)
     return [str(v) for v in df["STORE_ID"].tolist()]
 
 
-def get_diff_result(count_date: str, store_ids: Iterable[str] | None = None) -> pd.DataFrame:
+def get_diff_result(
+    count_date: str, store_ids: Iterable[str] | None = None
+) -> pd.DataFrame:
     count_date_lit = sql_literal(count_date)
 
     store_filter = ""
@@ -154,8 +165,7 @@ def get_diff_result(count_date: str, store_ids: Iterable[str] | None = None) -> 
         store_values = ", ".join(sql_literal(v) for v in store_ids)
         store_filter = f"AND inv.STORE_ID IN ({store_values})"
 
-    return fetch_pandas(
-        f"""
+    return fetch_pandas(f"""
         SELECT
             inv.SNAPSHOT_DATE,
             cnt.COUNT_DATE,
@@ -178,11 +188,12 @@ def get_diff_result(count_date: str, store_ids: Iterable[str] | None = None) -> 
         WHERE inv.SNAPSHOT_DATE = TO_DATE({count_date_lit})
         {store_filter}
         ORDER BY inv.STORE_ID, inv.PRODUCT_ID
-        """
-    )
+        """)
 
 
-def dataframe_to_excel_bytes(df: pd.DataFrame, sheet_name: str = "diff_result") -> bytes:
+def dataframe_to_excel_bytes(
+    df: pd.DataFrame, sheet_name: str = "diff_result"
+) -> bytes:
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name=sheet_name)
@@ -232,7 +243,7 @@ with upload_tab:
         st.dataframe(raw_df, use_container_width=True)
 
         validated_df, errors = validate_upload_df(raw_df)
-        if errors:
+        if validated_df is None or errors:
             for error in errors:
                 st.error(error)
         else:
@@ -250,7 +261,9 @@ with diff_tab:
 
     count_dates = get_count_dates()
     if not count_dates:
-        st.info("実棚卸データがまだ登録されていません。先にExcelをアップロードしてください。")
+        st.info(
+            "実棚卸データがまだ登録されていません。先にExcelをアップロードしてください。"
+        )
     else:
         selected_date = st.selectbox("棚卸日", count_dates)
         stores = get_stores(selected_date)
@@ -260,7 +273,9 @@ with diff_tab:
         show_summary(diff_df)
 
         only_diff = st.checkbox("差異ありのみ表示", value=False)
-        display_df = diff_df[diff_df["DIFF_STATUS"] == "差異あり"] if only_diff else diff_df
+        display_df = (
+            diff_df[diff_df["DIFF_STATUS"] == "差異あり"] if only_diff else diff_df
+        )
 
         st.dataframe(display_df, use_container_width=True)
 
@@ -273,7 +288,9 @@ with download_tab:
     else:
         selected_date = st.selectbox("棚卸日を選択", count_dates, key="download_date")
         stores = get_stores(selected_date)
-        selected_stores = st.multiselect("店舗IDを選択", stores, default=stores, key="download_stores")
+        selected_stores = st.multiselect(
+            "店舗IDを選択", stores, default=stores, key="download_stores"
+        )
 
         diff_df = get_diff_result(selected_date, selected_stores)
         show_summary(diff_df)
